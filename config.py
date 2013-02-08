@@ -9,7 +9,6 @@ def configure():
     All config keys listed in env.ints have their values converted to ints.
     env.provider_config_functions are tried until one succeeds or fails. E.g. env.provider_config_functions = [aws_config, gce_config]
     If a provider_config_function reports that it is selected but failed, sys.exit(1)
-    env.post_config_hook is run
     """
     if env.get("configured") is None:
         _apply_defaults_()
@@ -33,9 +32,6 @@ def configure():
             warn("No cloud provider config functions were supplied via env.provider_config_functions and/or no provider was selected via env.provider")
             # This might have been intentional for non-cloud use, so don't abort
             env.configured = True
-
-        if env.post_config_hook:
-            env.post_config_hook()
         return True
 
 def _apply_defaults_():

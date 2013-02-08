@@ -135,7 +135,6 @@ def wait_for_ssh_access():
 @task
 def connect():
     "Verify connectivity to node"
-    configure()
     run("uname",quiet=True)
 
 def decommission_nodes():
