@@ -1,13 +1,33 @@
 from itertools import chain
-from fabric.api import env
+from fabric.api import env, local, task, runs_once
 from fabric.colors import green,blue,cyan,yellow,magenta,red
 import subprocess
 import sys
 import time
 
 
+# -------------- fabricrc management --------------
 
+@task
+@runs_once
+def decrypt_fabricrc():
+    "Generate local fabricrc file by decrypting the shared template."
+    cipher, plain, encrypted = _encryption_settings_()
+    local('openssl %s -d -a -in %s -out %s' % (cipher, encrypted, plain))
+    local('chmod 600 %s' % plain)
 
+@task
+@runs_once
+def encrypt_fabricrc(cipher = 'fabricrc.cast5', plain = 'fabricrc'):
+    "Generate updated shared template by encryping local facricrc file."
+    cipher, plain, encrypted = _encryption_settings_()
+    local('openssl %s -e -a -in %s -out %s' % (cipher, plain, encrypted))
+
+def _encryption_settings_():
+    cipher = env.fabricrc_cipher if 'fabricrc_cipher' in env else 'cast5-cbc'
+    plain = env.fabricrc_plain_file if 'fabricrc_plain_file' in env else 'fabricrc'
+    encrypted = env.fabricrc_encrypted_file if 'fabricrc_encrypted_file' in env else 'fabricrc.%s' % cipher
+    return (cipher,plain,encrypted)
 
 # -------------- Logging helpers ------------------
 
