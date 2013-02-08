@@ -1,29 +1,55 @@
 from fabric.api import env
 from cloud import instances, use_only
-from . import error
+from . import warn,error
 import sys
 
 # -------------- Configuration helpers ------------------
-def configure(defaults, ints, provider_config_function):
+def configure():
+    """Runs configuration, if it has not already run.
+    All config settings in env.defaults are applied to env, if not already set.
+    All config keys listed in env.ints have their values converted to ints.
+    env.provider_config_functions are tried until one succeeds or fails. E.g. env.provider_config_functions = [aws_config, gce_config]
+    If a provider_config_function reports that it is selected but failed, sys.exit(1)
+    env.post_config_hook is run
+    """
     if env.get("configured") is None:
-        _apply_defaults_(defaults, ints)
-        if provider_config_function == None:
-            error("No provider config function supplied. Is env.provider set?")
-            sys.exit(1)
-        elif provider_config_function():
-            use_only(instances())
-        else:
-            sys.exit(1)
+        _apply_defaults_()
+        env.configured = False
+        if env.provider_config_functions and len(env.provider_config_functions) > 0:
+            for f in env.provider_config_functions:
+                result = f()
+                if result is None:
+                    # try another provider
+                    pass
+                elif result:
+                    # successfully configured this provider
+                    env.configured = True
+                    break
+                else:
+                    # This provider was selected, but configuration failed.
+                    # Error should have already been logged by provider_config_function.
+                    sys.exit(1)
 
-def _apply_defaults_(defaults, ints):
+        if not env.configured:
+            warn("No cloud provider config functions were supplied via env.provider_config_functions and/or no provider was selected via env.provider")
+            # This might have been intentional for non-cloud use, so don't abort
+            env.configured = True
+
+        if env.post_config_hook:
+            env.post_config_hook()
+        return True
+
+def _apply_defaults_():
     "Apply default values for optional settings"
-    for k in defaults:
-        if not k in env:
-            env[k] = defaults[k]
+    if "defaults" in env:
+        for k in env.defaults:
+            if not k in env:
+                env[k] = env.defaults[k]
 
     # Force numeric conversions to make easier use later on
-    for k in ints:
-        env[k] = int(env[k])
+    if "ints" in env:
+        for k in env.ints:
+            env[k] = int(env[k])
 
 def verify_env_contains_keys(keys):
     """Returns true if env contains the specified keys. Logs error and returns false otherwise."""

@@ -13,18 +13,10 @@ import time
 def is_ec2():
     return "provider" in env and env.provider == "ec2"
 
-def maybe_config():
-    "See fabulous.cloud.config"
-    return _ec2_config_ if is_ec2() else None
-
-def _region_():
-    return boto.ec2.get_region(env.aws_ec2_region, aws_access_key_id=env.aws_access_key, aws_secret_access_key=env.aws_secret_key)
-
-def _connect_():
-    return EC2Connection(env.aws_access_key, env.aws_secret_key, region=_region_())
-
-def _ec2_config_():
-    """Verify AWS EC2 properly configured."""
+def aws_config():
+    "See fabulous.config"
+    if not is_ec2():
+        return None
     if verify_env_contains_keys(['aws_access_key','aws_secret_key','aws_ec2_region']):
         if "ec2_ssh_key_name" in env and env.key_filename == None:
             error("EC2 SSH key name specified (%s) but no path to key file provided with -i parameter. Either provide both or neither (in which case a temporary one will be generated)." % env.ec2_ssh_key_name)
@@ -44,6 +36,12 @@ def _ec2_config_():
         return True
     else:
         return False
+
+def _region_():
+    return boto.ec2.get_region(env.aws_ec2_region, aws_access_key_id=env.aws_access_key, aws_secret_access_key=env.aws_secret_key)
+
+def _connect_():
+    return EC2Connection(env.aws_access_key, env.aws_secret_key, region=_region_())
 
 # Adapted from https://github.com/garethr/cloth/blob/master/src/cloth/utils.py
 def _ec2_instances_():

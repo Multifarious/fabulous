@@ -1,6 +1,6 @@
 from collections import defaultdict
 from fabric.api import env, execute, run, task
-from .. import debug,error,info,warn,retry,run_and_return_result
+from fabulous import debug,error,info,warn,retry,run_and_return_result
 import re
 
 def show():
@@ -134,6 +134,7 @@ def wait_for_ssh_access():
 @task
 def connect():
     "Verify connectivity to node"
+    configure()
     run("uname",quiet=True)
 
 def decommission_nodes():

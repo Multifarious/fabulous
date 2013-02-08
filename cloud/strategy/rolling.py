@@ -1,8 +1,9 @@
 from fabric.api import env, task, runs_once
 from fabric.colors import cyan,green
 from fabric.contrib.console import confirm
-from fabulous import debug,info, retry
+from fabulous import debug,info,retry
 from fabulous.cloud import decommission_nodes,id_of,instances_with_role,provision_nodes,show,use_only
+from fabulous.config import configure
 
 # Helpers for a rolling provisioning strategy in which new deployments go to new hosts rather than being applied in-place to existing ones.
 
@@ -11,6 +12,7 @@ from fabulous.cloud import decommission_nodes,id_of,instances_with_role,provisio
 @runs_once
 def list_nodes():
     """List all nodes."""
+    configure()
     print("")
     print("** ALL nodes **")
     use_all_nodes()
@@ -36,6 +38,7 @@ def list_nodes():
 @runs_once
 def provision():
     """Provisions new cluster of nodes."""
+    configure()
     last_id = use_all_nodes()
     use_only([])
     env.new_nodes = provision_nodes(env.num_nodes, last_id + 1)
@@ -44,6 +47,7 @@ def provision():
 @runs_once
 def decommission_unused():
     """De-provisions nodes no longer part of the active cluster."""
+    configure()
     use_inactive_nodes()
     if len(env.nodes) == 0:
         info("There are no inactive nodes to decommission.")
@@ -54,6 +58,7 @@ def decommission_unused():
 @runs_once
 def decommission_all():
     """De-provisions all nodes."""
+    configure()
     use_all_nodes()
     if len(env.nodes) == 0:
         info("There are no nodes to decommission.")

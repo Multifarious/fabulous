@@ -11,33 +11,11 @@ from os.path import expanduser
 def is_gce():
     return "provider" in env and env.provider == "google_compute_engine"
 
-def maybe_config():
-    "See fabulous.cloud.config"
-    return _gce_config_ if is_gce() else None
+def gce_config():
+    "See fabulous.config"
+    if not is_gce():
+        return None
 
-class GoogleComputeEngineInstance:
-    def __init__(self,gcutil_response):
-        self.id = gcutil_response["id"]
-        self.ip_address = gcutil_response.get("networkInterfaces")[0].get("accessConfigs")[0].get("natIP") # TODO: do not assume first NAT'd IP of first NIC is present or the right one to use
-        self.tags = {"Name" : gcutil_response["name"]}
-
-    def __str__(self):
-        return "<Google Compute Engine node '%s' @ '%s'>" % (self.tags.get("Name"), self.ip_address)
-
-    @property
-    def tags(self):
-        return self.tags
-
-    @property
-    def ip_address(self):
-        return self.ip_address
-
-    @property
-    def id(self):
-        return self.id
-
-def _gce_config_():
-    """Verify Google Compute Engine properly configured."""
     result = verify_env_contains_keys(['google_storage_access_key','google_storage_secret_key'])
     if result:
         code,stdout,stderr = run_and_return_result(['gcutil','auth','--just_check_auth'])
@@ -61,6 +39,28 @@ def _gce_config_():
         error("gcutil execution failed!\n%s" % stderr)
         warn("gcutil must be configured and default project must be set (see --cache_flag_values) in order to proceed.")
     return False
+
+
+class GoogleComputeEngineInstance:
+    def __init__(self,gcutil_response):
+        self.id = gcutil_response["id"]
+        self.ip_address = gcutil_response.get("networkInterfaces")[0].get("accessConfigs")[0].get("natIP") # TODO: do not assume first NAT'd IP of first NIC is present or the right one to use
+        self.tags = {"Name" : gcutil_response["name"]}
+
+    def __str__(self):
+        return "<Google Compute Engine node '%s' @ '%s'>" % (self.tags.get("Name"), self.ip_address)
+
+    @property
+    def tags(self):
+        return self.tags
+
+    @property
+    def ip_address(self):
+        return self.ip_address
+
+    @property
+    def id(self):
+        return self.id
 
 # Introduce Google Compute Engine support
 def _google_compute_engine_instances_():
