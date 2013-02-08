@@ -1,5 +1,4 @@
 from fabric.api import env
-from cloud import instances, use_only
 from . import warn,error
 import sys
 
