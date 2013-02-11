@@ -99,6 +99,9 @@ def instances_with_name(exp=".*"):
             pass
     return instances
 
+def instances_with_platform_and_role(platform, role):
+    return filter(lambda node: platform_of(node) == platform and role_of(node) == role, instances())
+
 def instances_with_role(role):
     return filter(lambda node: role_of(node) == role, instances())
 

@@ -2,7 +2,7 @@ from fabric.api import env, task, runs_once
 from fabric.colors import cyan,green
 from fabric.contrib.console import confirm
 from fabulous import debug,info,retry
-from fabulous.cloud import decommission_nodes,id_of,instances_with_role,provision_nodes,show,use_only
+from fabulous.cloud import decommission_nodes,id_of,instances_with_platform_and_role,provision_nodes,show,use_only
 from fabulous.config import configure
 
 # Helpers for a rolling provisioning strategy in which new deployments go to new hosts rather than being applied in-place to existing ones.
@@ -83,7 +83,7 @@ def use_active_nodes():
 
 def use_all_nodes():
     "Uses all existing nodes, returns max id of running nodes (or 0 if none)"
-    all_nodes = sorted(instances_with_role(env.role), key = id_of)
+    all_nodes = sorted(instances_with_platform_and_role(env.platform, env.role), key = id_of)
     use_only(all_nodes)
     if len(all_nodes) > 0:
         return max([id_of(node) for node in all_nodes])
