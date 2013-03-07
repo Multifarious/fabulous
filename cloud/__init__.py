@@ -2,6 +2,7 @@ from collections import defaultdict
 from fabric.api import env, execute, run, task
 from fabulous import debug,error,info,warn,retry,run_and_return_result
 from fabulous.config import configure
+from paramiko import SSHException
 import re
 
 def show():
@@ -23,11 +24,11 @@ def use(node):
     "Add the node to the fabric environment"
     try:
         role = node.tags.get("Name").split('-')[1]
-        env.roledefs[role] += [node.ip_address]
+        env.roledefs[role] += [ip_address(node)]
     except IndexError:
         pass
     env.nodes += [node]
-    env.hosts += [node.ip_address]
+    env.hosts += [ip_address(node)]
 
 def use_only(nodes):
     "Reverts any prior use(node) invocations and uses the specified nodes."
@@ -41,11 +42,11 @@ def unuse(node):
     "Remove specified node from the fabric environment; undoes use(node) from Cloth utils.py."
     try:
         role = role_of(node)
-        env.roledefs[role] = [ip_address for ip_address in env.roledefs[role] if ip_address != node.ip_address]
+        env.roledefs[role] = [ip_address for ip_address in env.roledefs[role] if ip_address != ip_address(node)]
     except IndexError:
         pass
     env.nodes = [other_node for other_node in env.nodes if other_node != node]
-    env.hosts = [ip_address for ip_address in env.hosts if ip_address != node.ip_address]
+    env.hosts = [ip_address for ip_address in env.hosts if ip_address != ip_address(node)]
 
 
 ## ------------ Node naming conventions ------------------
@@ -72,7 +73,7 @@ def id_of(node):
 
 def pretty_instance(node):
     "Format node as human-readable <instance id> (<name> @ <ip address>) String"
-    return "%s (%s @ %s)" % (node.id, node.tags.get("Name"), node.ip_address )
+    return "%s (%s @ %s)" % (node.id, node.tags.get("Name"), ip_address(node))
 
 def pretty_instances(nodes, joinWith=", "):
     return joinWith.join([pretty_instance(node) for node in nodes])
@@ -81,7 +82,7 @@ def pretty_instances(nodes, joinWith=", "):
 # Adapted from https://github.com/garethr/cloth/blob/master/src/cloth/utils.py to support Google Compute Engine as well
 
 def instances():
-    return [node for node in env.provider_instance_function() if node.tags and node.ip_address]
+    return [node for node in env.provider_instance_function() if node.tags and ip_address(node)]
 
 
 def instances_with_name(exp=".*"):
@@ -130,7 +131,10 @@ def provision_nodes(num, next_id):
 
 # EC2 reports instance state as 'running' before SSH access is available.
 # Delay here so downstream tasks can assume all nodes are available.
+# When failing to connect directly, you get SystemExit
+# When failing to connect via an SSH gateway, you get SSHException
 @retry(SystemExit, total_tries=8)
+@retry(SSHException, total_tries=8)
 def wait_for_ssh_access():
     execute(connect)
     info("All nodes are now online.")
@@ -144,3 +148,12 @@ def decommission_nodes():
     "Stop instances"
     info("Decommissioning node(s) %s." % pretty_instances(env.nodes))
     env.provider_decommission_function()
+
+## ------------------ Node utilities -----------------------
+def ip_address(node):
+    "Return public IP address of node, if any, otherwise private IP address"
+    if node.ip_address:
+        return node.ip_address
+    else:
+        return node.private_ip_address
+

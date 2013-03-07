@@ -2,7 +2,7 @@ import boto
 from boto.ec2.connection import EC2Connection
 from fabric.api import env
 from fabric.colors import green
-from . import pretty_instance
+from . import ip_address, pretty_instance
 from .. import debug, error, info, warn
 from ..config import verify_env_contains_keys
 import os
@@ -26,6 +26,8 @@ def aws_config():
             return False
         if 'aws_ec2_security_group' in env:
             env.ec2_security_groups = [env.aws_ec2_security_group]
+        elif 'aws_ec2_security_group_id' in env:
+            env.ec2_security_group_ids = [env.aws_ec2_security_group_id]
         else:
             env.ec2_security_groups = None
         env.user=env['ec2_ami_user'] # Force SSH via the configured user for our AMI rather than local user identified by $USER
@@ -75,7 +77,9 @@ def _provision_ec2_nodes_(num, next_id):
         max_count=num,
         key_name=env.ec2_ssh_key_name,
         instance_type=env.ec2_instance_type,
-        security_groups=env.ec2_security_groups)
+        security_groups=env.ec2_security_groups,
+        security_group_ids=env.ec2_security_group_ids,
+        subnet_id=env.ec2_subnet if 'ec2_subnet' in env else None)
     new_nodes = new_reservations.instances
     info("Provisioning node(s) %s" % ", ".join([node.id for node in new_nodes]))
     new_nodes_with_ids = zip(new_nodes,range(next_id, len(new_nodes)+next_id))
@@ -95,7 +99,7 @@ def wait_for_ec2_provisioning(new_node, platform, role, identifier, timeout_secs
     new_node.add_tag('Name', "%s-%s-%s" % (platform, role, identifier))
     new_node.update()
     info("%s is provisioned." % pretty_instance(new_node))
-    print(green("ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s %s@%s" % (env.key_filename[0], env.user, new_node.ip_address)))
+    print(green("ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s %s@%s" % (env.key_filename[0], env.user, ip_address(new_node))))
     return new_node
 
 def _decommission_ec2_nodes_():
@@ -124,7 +128,7 @@ def find_orphan_ec2_nodes():
     return instances
 
 def assign_elastic_ip(ip_address, node):
-    if ip_address == node.ip_address:
+    if ip_address == ip_address(node):
         debug("ElasticIP %s already assigned to %s" % (env.elastic_ip, pretty_instance(node)))
     else:
         info("Assigning ElasticIP %s to %s" % (env.elastic_ip, pretty_instance(node)))
