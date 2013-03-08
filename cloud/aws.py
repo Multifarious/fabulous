@@ -1,7 +1,8 @@
 import boto
 from boto.ec2.connection import EC2Connection
-from fabric.api import env
+from fabric.api import env, execute, run
 from fabric.colors import green
+from fabric.contrib.files import sed
 from . import ip_address, pretty_instance
 from .. import debug, error, info, warn
 from ..config import verify_env_contains_keys
@@ -30,6 +31,10 @@ def aws_config():
         env.provider_instance_function = _ec2_instances_
         env.provider_decommission_function = _decommission_ec2_nodes_
         env.provider_provision_function = _provision_ec2_nodes_
+        # By default, assume /etc/hosts needs munging if in VPC
+        munge_by_default = 'aws_ec2_subnet_id' in env
+        if ('aws_ec2_munge_etc_hosts' in env and env.aws_ec2_munge_etc_hosts) or munge_by_default:
+            env.provider_post_provision_hook = _munge_etc_hosts_
         debug("AWS access configured. EC2 SSH as %s using key %s" % (env.user, env.key_filename[0] if env.key_filename else "<to be created>"))
         return True
     else:
@@ -80,9 +85,9 @@ def _provision_ec2_nodes_(num, next_id):
     info("Provisioning node(s) %s" % ", ".join([node.id for node in new_nodes]))
     new_nodes_with_ids = zip(new_nodes,range(next_id, len(new_nodes)+next_id))
 
-    return map(lambda node_and_id: wait_for_ec2_provisioning(node_and_id[0], env.platform, env.role, str(node_and_id[1])), new_nodes_with_ids)
+    return map(lambda node_and_id: _wait_for_ec2_provisioning_(node_and_id[0], env.platform, env.role, str(node_and_id[1])), new_nodes_with_ids)
 
-def wait_for_ec2_provisioning(new_node, platform, role, identifier, timeout_secs=180):
+def _wait_for_ec2_provisioning_(new_node, platform, role, identifier, timeout_secs=180):
     "Waits for instance to come online, applies name to it (using Cloth naming convention)"
     timeout = time.time() + timeout_secs
     while (new_node.state != 'running'):
@@ -97,6 +102,16 @@ def wait_for_ec2_provisioning(new_node, platform, role, identifier, timeout_secs
     info("%s is provisioned." % pretty_instance(new_node))
     print(green("ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s %s@%s" % (env.key_filename[0], env.user, ip_address(new_node))))
     return new_node
+
+def _munge_etc_hosts_():
+    """Add hostname as name for 127.0.0.1 to /etc/hosts.
+    Ubuntu AMIs inside VPC annoyingly log 'unable to resolve host ip-www-xxx-yyy-zzz'
+    on every sudo invocation; fix by adding configured hostname to /etc/hosts."""
+    execute(_munge_etc_hosts_delegate_)
+
+def _munge_etc_hosts_delegate_():
+    hostname = run("hostname").strip()
+    sed('/etc/hosts', '127.0.0.1 localhost', '127.0.0.1 localhost %s' % hostname, use_sudo=True)
 
 def _decommission_ec2_nodes_():
     # We're using instance-store backed hosts, and they cannot be stopped, only terminated.

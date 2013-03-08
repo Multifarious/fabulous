@@ -127,6 +127,8 @@ def provision_nodes(num, next_id):
     nodes = env.provider_provision_function(num, next_id)
     use_only(nodes)
     wait_for_ssh_access()
+    if 'provider_post_provision_hook' in env:
+        env.provider_post_provision_hook()
 
 
 # EC2 reports instance state as 'running' before SSH access is available.
