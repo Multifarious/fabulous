@@ -48,6 +48,11 @@ def unuse(node):
     env.nodes = [other_node for other_node in env.nodes if other_node != node]
     env.hosts = [ip_address for ip_address in env.hosts if ip_address != ip_address(node)]
 
+def current_node():
+    for node in env.nodes:
+        if ip_address(node) == env.host:
+            return node
+    return None
 
 ## ------------ Node naming conventions ------------------
 
