@@ -138,9 +138,9 @@ def find_orphan_ec2_nodes():
         print("%s %s %s %s %s" % (pretty_instance(i), i.launch_time,i.state,i.instance_type,i.dns_name))
     return instances
 
-def assign_elastic_ip(ip_address, node):
-    if ip_address == ip_address(node):
+def assign_elastic_ip(node):
+    if env.elastic_ip == ip_address(node):
         debug("ElasticIP %s already assigned to %s" % (env.elastic_ip, pretty_instance(node)))
     else:
         info("Assigning ElasticIP %s to %s" % (env.elastic_ip, pretty_instance(node)))
-        _connect_().associate_address( node.id,ip_address)
+        _connect_().associate_address(node.id, env.elastic_ip)
