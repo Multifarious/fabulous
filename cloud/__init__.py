@@ -76,8 +76,13 @@ def id_of(node):
     id = _node_name_piece_(node, 2)
     return int(id) if id else None
 
-def pretty_instance(node):
+def pretty_instance(node = None):
+    """
     "Format node as human-readable <instance id> (<name> @ <ip address>) String"
+    :param node: Defaults to current_node()
+    """
+    if not node:
+        node = current_node()
     return "%s (%s @ %s)" % (node.id, node.tags.get("Name"), ip_address(node))
 
 def pretty_instances(nodes, joinWith=", "):
