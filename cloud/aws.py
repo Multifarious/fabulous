@@ -87,8 +87,14 @@ def _provision_ec2_nodes_(num, next_id):
 
     return map(lambda node_and_id: _wait_for_ec2_provisioning_(node_and_id[0], env.platform, env.role, str(node_and_id[1])), new_nodes_with_ids)
 
-def _wait_for_ec2_provisioning_(new_node, platform, role, identifier, timeout_secs=180):
-    "Waits for instance to come online, applies name to it (using Cloth naming convention)"
+def _wait_for_ec2_provisioning_(new_node, platform, role, identifier):
+    """Waits for instance to come online, applies name to it (using Cloth naming convention)"""
+    if env.provisioning_timeout:
+       timeout_secs = env.provisioning_timeout
+    else:
+        debug('Default provisioning timeout of 180s will be used for provisioning; set provisioning_timeout in the fabricrc file for a longer or shorter timeout.')
+        timeout_secs = 180
+
     timeout = time.time() + timeout_secs
     while (new_node.state != 'running'):
         if time.time() > timeout:
