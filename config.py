@@ -11,6 +11,9 @@ def configure():
     If a provider_config_function reports that it is selected but failed, sys.exit(1)
     """
     if env.get("configured") is None:
+        if not "defaults" in env:
+            env.defaults = {}
+        env.defaults['provisioning_timeout'] = '180'
         if not "ints" in env:
             env.ints = []
         env.ints.append('provisioning_timeout')
