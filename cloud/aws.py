@@ -43,7 +43,9 @@ def aws_config():
 def _region_():
     return boto.ec2.get_region(env.aws_ec2_region, aws_access_key_id=env.aws_access_key_id, aws_secret_access_key=env.aws_secret_access_key)
 
-def _connect_():
+def connect():
+    """Return a boto EC2Connection using credentials specified in env.
+    Use directly for AWS-specific tweaking not supported by other fabulous functionality."""
     return EC2Connection(env.aws_access_key_id, env.aws_secret_access_key, region=_region_())
 
 # Adapted from https://github.com/garethr/cloth/blob/master/src/cloth/utils.py
@@ -58,7 +60,7 @@ def _ec2_instances_():
 
 def create_ec2_key_pair():
     env.aws_ec2_ssh_key = "log_parse_%d_%d" % (int(time.time()), int(1000*random.random()))
-    key_pair = _connect_().create_key_pair(env.aws_ec2_ssh_key)
+    key_pair = connect().create_key_pair(env.aws_ec2_ssh_key)
     # Caution: key file left dangling around on disk unless delete_ec2_key_pair is called later on.
     env.key_filename = os.path.join(tempfile.mkdtemp(), env.aws_ec2_ssh_key + ".pem")
     key_pair.save(os.path.dirname(env.key_filename))
@@ -72,7 +74,7 @@ def _provision_ec2_nodes_(num, next_id):
     if not "aws_ec2_ssh_key" in env:
         create_ec2_key_pair()
 
-    new_reservations = _connect_().run_instances(
+    new_reservations = connect().run_instances(
         env.ec2_ami,
         min_count=num,
         max_count=num,
@@ -121,10 +123,10 @@ def _munge_etc_hosts_delegate_():
 
 def _decommission_ec2_nodes_():
     # We're using instance-store backed hosts, and they cannot be stopped, only terminated.
-    _connect_().terminate_instances([node.id for node in env.nodes])
+    connect().terminate_instances([node.id for node in env.nodes])
 
 def delete_ec2_key_pair():
-    _connect_().delete_key_pair(env.aws_ec2_ssh_key)
+    connect().delete_key_pair(env.aws_ec2_ssh_key)
     # Trash the whole temp directory.
     for root, dirs, files in os.walk(os.path.dirname(env.key_filename)):
         for f in files:
@@ -134,7 +136,7 @@ def delete_ec2_key_pair():
 
 def find_orphan_ec2_nodes():
     "Assumes any running instance using a temporary log_parse_ key pair is an orphan. Use with caution."
-    reservations = _connect_().get_all_instances()
+    reservations = connect().get_all_instances()
     instances = [i for r in reservations for i in r.instances]
     #instances = filter(lambda i: i.state == 'running' and i.image_id == 'ami-9a873ff3' and i.launch_time > '2012-12-22T00:54' and i.launch_time < '2012-12-22T06:58' , instances)
     instances = filter(lambda i: i.key_name.startswith("log_parse_") and i.state=='running',instances)
@@ -149,4 +151,4 @@ def assign_elastic_ip(node):
         debug("ElasticIP %s already assigned to %s" % (env.elastic_ip, pretty_instance(node)))
     else:
         info("Assigning ElasticIP %s to %s" % (env.elastic_ip, pretty_instance(node)))
-        _connect_().associate_address(node.id, env.elastic_ip)
+        connect().associate_address(node.id, env.elastic_ip)
