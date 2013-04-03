@@ -135,7 +135,7 @@ def provider_config(provider_config_function):
 def provision_nodes(num, next_id):
     info("Provisioning %d new node(s)" % (num))
     nodes = env.provider_provision_function(num, next_id)
-    use_only(nodes)
+    use_only(*nodes)
     wait_for_ssh_access()
     if 'provider_post_provision_hook' in env:
         env.provider_post_provision_hook()

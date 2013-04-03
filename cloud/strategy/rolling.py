@@ -40,7 +40,7 @@ def provision():
     """Provisions new cluster of nodes."""
     configure()
     last_id = use_all_nodes()
-    use_only([])
+    use_only()
     env.new_nodes = provision_nodes(env.num_nodes, last_id + 1)
 
 @task(name="prune")
@@ -71,20 +71,20 @@ def use_inactive_nodes():
     "Uses only nodes that are inactive in the cluster. Membership is simply based on expected cluster size and sequential node id."
     use_all_nodes()
     if len(env.nodes) > env.num_nodes:
-        use_only(env.nodes[0:-env.num_nodes])
+        use_only(*env.nodes[0:-env.num_nodes])
     else:
-        use_only([])
+        use_only()
 
 def use_active_nodes():
     "Uses only nodes that are active in the cluster. Membership is simply based on expected cluster size and sequential node id."
     use_all_nodes()
     if len(env.nodes) > env.num_nodes:
-        use_only(env.nodes[-env.num_nodes:])
+        use_only(*env.nodes[-env.num_nodes:])
 
 def use_all_nodes():
     "Uses all existing nodes, returns max id of running nodes (or 0 if none)"
     all_nodes = sorted(instances_with_platform_and_role(env.platform, env.role), key = id_of)
-    use_only(all_nodes)
+    use_only(*all_nodes)
     if len(all_nodes) > 0:
         return max([id_of(node) for node in all_nodes])
     else:
