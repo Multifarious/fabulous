@@ -18,7 +18,7 @@ def aws_config():
     "See fabulous.config"
     if not is_ec2():
         return None
-    if verify_env_contains_keys(['aws_access_key_id','aws_secret_access_key','aws_ec2_region']):
+    if verify_env_contains_keys('aws_access_key_id','aws_secret_access_key','aws_ec2_region'):
         if "aws_ec2_ssh_key" in env and env.key_filename == None:
             error("EC2 SSH key name specified (%s) but no path to key file provided with -i parameter. Either provide both or neither (in which case a temporary one will be generated)." % env.aws_ec2_ssh_key)
             return False

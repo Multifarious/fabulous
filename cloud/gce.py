@@ -16,7 +16,7 @@ def gce_config():
     if not is_gce():
         return None
 
-    result = verify_env_contains_keys(['google_storage_access_key','google_storage_secret_key'])
+    result = verify_env_contains_keys('google_storage_access_key','google_storage_secret_key')
     if result:
         code,stdout,stderr = run_and_return_result(['gcutil','auth','--just_check_auth'])
         if code == 0:

@@ -30,7 +30,7 @@ def use(node):
     env.nodes += [node]
     env.hosts += [ip_address(node)]
 
-def use_only(nodes):
+def use_only(*nodes):
     "Reverts any prior use(node) invocations and uses the specified nodes."
     env.roledefs = defaultdict(list)
     env.nodes = []

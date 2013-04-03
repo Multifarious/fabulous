@@ -53,10 +53,8 @@ def _apply_defaults_():
         for k in env.ints:
             env[k] = int(env[k])
 
-def verify_env_contains_keys(keys):
+def verify_env_contains_keys(*keys):
     """Returns true if env contains the specified key(s). Logs error and returns false otherwise."""
-    if isinstance(keys,basestring):
-        keys = [keys]
     missing = filter(lambda key : key not in env, keys)
     if missing:
         # create key1=val1,key2=val2,...
