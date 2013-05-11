@@ -53,6 +53,14 @@ def _apply_defaults_():
         for k in env.ints:
             env[k] = int(env[k])
 
+    # Force boolean conversions to make easier use later on
+    if "bools" in env:
+        for k in env.ints:
+            if k in env:
+                env[k] = env[k].lower() in ("y","yes","t","true","1","enabled","on")
+            else:
+                env[k] = False
+
 def verify_env_contains_keys(*keys):
     """Returns true if env contains the specified key(s). Logs error and returns false otherwise."""
     missing = filter(lambda key : key not in env, keys)
