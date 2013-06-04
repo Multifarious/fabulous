@@ -134,18 +134,6 @@ def delete_ec2_key_pair():
     os.removedirs(os.path.dirname(env.key_filename))
     info("Deleted temporary EC2 key pair '%s'" % (env.aws_ec2_ssh_key))
 
-def find_orphan_ec2_nodes():
-    "Assumes any running instance using a temporary log_parse_ key pair is an orphan. Use with caution."
-    reservations = connect().get_all_instances()
-    instances = [i for r in reservations for i in r.instances]
-    #instances = filter(lambda i: i.state == 'running' and i.image_id == 'ami-9a873ff3' and i.launch_time > '2012-12-22T00:54' and i.launch_time < '2012-12-22T06:58' , instances)
-    instances = filter(lambda i: i.key_name.startswith("log_parse_") and i.state=='running',instances)
-    if instances:
-        warn("Possible orphan instances: %s" % [i.id for i in instances])
-    for i in instances:
-        print("%s %s %s %s %s" % (pretty_instance(i), i.launch_time,i.state,i.instance_type,i.dns_name))
-    return instances
-
 def assign_elastic_ip(node):
     if env.elastic_ip == ip_address(node):
         debug("ElasticIP %s already assigned to %s" % (env.elastic_ip, pretty_instance(node)))
