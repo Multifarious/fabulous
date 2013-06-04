@@ -161,6 +161,22 @@ def decommission_nodes():
     info("Decommissioning node(s) %s." % pretty_instances(env.nodes))
     env.provider_decommission_function()
 
+def lb_specified():
+    """Returns true if a load balancer has been specified."""
+    return env.provider_load_balancer_is_specified_function()
+
+def lb_get_nodes():
+    """Returns list of nodes currently behind the load balancer."""
+    return env.provider_load_balancer_membership_function()
+
+def lb_add_nodes():
+    """Adds the currently use()'d nodes to the load balancer."""
+    env.provider_load_balancer_add_nodes_function()
+
+def lb_remove_nodes():
+    """Removes the currently use()'d nodes from the load balancer."""
+    env.provider_load_balancer_remove_nodes_function()
+
 ## ------------------ Node utilities -----------------------
 def ip_address(node):
     "Return public IP address of node, if any, otherwise private IP address"

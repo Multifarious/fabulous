@@ -1,5 +1,5 @@
-import boto
-from boto.ec2.connection import EC2Connection
+from boto import ec2
+from boto.ec2 import elb
 from fabric.api import env, execute, run
 from fabric.colors import green
 from fabric.contrib.files import sed
@@ -31,6 +31,10 @@ def aws_config():
         env.provider_instance_function = _ec2_instances_
         env.provider_decommission_function = _decommission_ec2_nodes_
         env.provider_provision_function = _provision_ec2_nodes_
+        env.provider_load_balancer_is_specified_function = _is_elb_specifed_
+        env.provider_load_balancer_membership_function = enumerate_elb_members
+        env.provider_load_balancer_add_nodes_function = assign_to_elb
+        env.provider_load_balancer_remove_nodes_function = unassign_from_elb
         # By default, assume /etc/hosts needs munging if in VPC
         munge_by_default = 'aws_ec2_subnet_id' in env
         if ('aws_ec2_munge_etc_hosts' in env and env.aws_ec2_munge_etc_hosts) or munge_by_default:
@@ -40,18 +44,31 @@ def aws_config():
     else:
         return False
 
-def _region_():
-    return boto.ec2.get_region(env.aws_ec2_region, aws_access_key_id=env.aws_access_key_id, aws_secret_access_key=env.aws_secret_access_key)
-
-def connect():
-    """Return a boto EC2Connection using credentials specified in env.
+def connect(region = None):
+    """Return a boto EC2Connection using credentials specified in env. Connects to env.aws_ec2_region unless otherwise specified.
     Use directly for AWS-specific tweaking not supported by other fabulous functionality."""
-    return EC2Connection(env.aws_access_key_id, env.aws_secret_access_key, region=_region_())
+    region = region or env.aws_ec2_region
+    return ec2.connect_to_region(region, aws_access_key_id=env.aws_access_key_id, aws_secret_access_key=env.aws_secret_access_key)
+
+def connect_elb(region = None):
+    """Return a boto ELBConnection using credentials specified in env.  Connects to env.aws_ec2_region unless otherwise specified.
+    Use directly for AWS-specific tweaking not supported by other fabulous functionality."""
+    region = region or env.aws_ec2_region
+    return elb.connect_to_region(region, aws_access_key_id=env.aws_access_key_id, aws_secret_access_key=env.aws_secret_access_key)
+
+def _ec2_instances_by_id():
+    "Use the EC2 API to get a list of all machines, return dict keyed by id."
+    reservations = connect().get_all_instances()
+    instances = {}
+    for reservation in reservations:
+        for instance in reservation.instances:
+            instances[instance.id] = instance
+    return instances
 
 # Adapted from https://github.com/garethr/cloth/blob/master/src/cloth/utils.py
 def _ec2_instances_():
     "Use the EC2 API to get a list of all machines"
-    reservations = _region_().connect(aws_access_key_id=env.aws_access_key_id, aws_secret_access_key=env.aws_secret_access_key).get_all_instances()
+    reservations = connect().get_all_instances()
     instances = []
     for reservation in reservations:
         instances += reservation.instances
@@ -69,7 +86,6 @@ def create_ec2_key_pair():
 
 def _provision_ec2_nodes_(num, next_id):
     "Provision and return num nodes, after verifying that they are running."
-    # future: region support. Do boto.ec2.regions(), find the one you want in the result, and use it's connect method.
 
     if not "aws_ec2_ssh_key" in env:
         create_ec2_key_pair()
@@ -122,8 +138,20 @@ def _munge_etc_hosts_delegate_():
     sed('/etc/hosts', '127.0.0.1 localhost', '127.0.0.1 localhost %s' % hostname, use_sudo=True)
 
 def _decommission_ec2_nodes_():
-    # We're using instance-store backed hosts, and they cannot be stopped, only terminated.
-    connect().terminate_instances([node.id for node in env.nodes])
+    node_ids = {}
+    for node in env.nodes:
+        node_ids[node.id] = node
+    ok = True
+    for elb in connect_elb().get_all_load_balancers():
+        for instance_info in elb.instances:
+            if instance_info.id in node_ids:
+                warn("%s is one of %d instances behind Elastic Load Balancer %s" % (node_ids[instance_info.id], len(elb.instances), elb.dns_name))
+                ok = False
+    if ok:
+        # instance-store backed hosts cannot be stopped, only terminated.
+        connect().terminate_instances([node.id for node in env.nodes])
+    else:
+        error("Decommissioning aborted because one or more nodes were behind load balancers.")
 
 def delete_ec2_key_pair():
     connect().delete_key_pair(env.aws_ec2_ssh_key)
@@ -134,9 +162,72 @@ def delete_ec2_key_pair():
     os.removedirs(os.path.dirname(env.key_filename))
     info("Deleted temporary EC2 key pair '%s'" % (env.aws_ec2_ssh_key))
 
-def assign_elastic_ip(node):
-    if env.elastic_ip == ip_address(node):
-        debug("ElasticIP %s already assigned to %s" % (env.elastic_ip, pretty_instance(node)))
+def assign_elastic_ip(node, elastic_ip=None):
+    """Assigns the specified elastic IP address to the specified node. Uses env.elastic_ip if no elastic_ip provided."""
+    elastic_ip = elastic_ip or env.elastic_ip
+    if elastic_ip == ip_address(node):
+        debug("ElasticIP %s already assigned to %s" % (elastic_ip, pretty_instance(node)))
     else:
-        info("Assigning ElasticIP %s to %s" % (env.elastic_ip, pretty_instance(node)))
-        connect().associate_address(node.id, env.elastic_ip)
+        info("Assigning ElasticIP %s to %s" % (elastic_ip, pretty_instance(node)))
+        connect().associate_address(node.id, elastic_ip)
+
+def _find_elb_(elb_dns_name=None):
+    elb_dns_name = elb_dns_name or env.aws_elb_name
+    elb = connect_elb().get_all_load_balancers([elb_dns_name])
+    if not elb:
+        error("Cannot locate ELB %s. Known load balancers are: %s" % (
+            elb_dns_name,
+            [elb.dns_name for elb in connect_elb().get_all_load_balancers()]
+        ))
+    return elb
+
+def _is_elb_specifed_():
+    return "aws_elb_name" in env
+
+def assign_to_elb(nodes = None, elb_dns_name = None):
+    """Adds nodes to the the Elastic Load Balancer.
+    :type: list
+    :param: Nodes to assign or None for env.nodes
+
+    :type: str
+    :param: DNS name of ELB or None for env.aws_elb_name.
+    """
+    nodes = nodes or env.nodes
+    elb = _find_elb_(elb_dns_name)
+    if elb:
+        info("Adding %s to ELB %s" % ([pretty_instance(node) for node in nodes], elb_dns_name))
+        elb.register_instances([node.id for node in nodes])
+
+
+def unassign_from_elb(nodes = None, elb_dns_name=None):
+    """Removes nodes from the Elastic Load Balancer.
+    :type: list
+    :param: Nodes to assign or None for env.nodes
+
+    :type: str
+    :param: DNS name of ELB or None for env.aws_elb_name.
+    """
+    nodes = nodes or env.nodes
+    elb = _find_elb_(elb_dns_name)
+    if elb:
+        info("Removing %s from ELB %s" % ([pretty_instance(node) for node in nodes], elb_dns_name))
+        elb.deregister_instances([node.id for node in nodes])
+
+def enumerate_elb_members(elb_dns_name=None):
+    """Returns list of nodes behind the Elastic Load Balancer.
+
+    :type: str
+    :param: DNS name of ELB or None for env.aws_elb_name.
+    """
+    elb = _find_elb_(elb_dns_name)
+    result = []
+    if elb:
+        all_instances = _ec2_instances_by_id()
+        for instance_info in elb.instances():
+            instance = all_instances.get(instance_info.id)
+            if instance:
+                result += instance
+            else:
+                warn("ELB %s reports member node %s, but no such instance is known." % (elb.dns_name,instance_info.id))
+    return result
+
