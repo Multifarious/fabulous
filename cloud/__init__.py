@@ -161,8 +161,19 @@ def decommission_nodes():
     info("Decommissioning node(s) %s." % pretty_instances(env.nodes))
     env.provider_decommission_function()
 
+def virtual_ip_specified():
+    """Returns True if a virtual IP address has been specified."""
+    return env.provider_virtual_ip_is_specified_functionn()
+
+def virtual_ip_assign():
+    """Assigns virtual IP address to currently use()'d node."""
+    if len(env.nodes) == 1:
+        env.provider_virtual_ip_assign_function()
+    else:
+        error("Cannot assign virtual IP unless exactly one node is specified.")
+
 def lb_specified():
-    """Returns true if a load balancer has been specified."""
+    """Returns True if a load balancer has been specified."""
     return env.provider_load_balancer_is_specified_function()
 
 def lb_get_nodes():

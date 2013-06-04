@@ -31,6 +31,8 @@ def aws_config():
         env.provider_instance_function = _ec2_instances_
         env.provider_decommission_function = _decommission_ec2_nodes_
         env.provider_provision_function = _provision_ec2_nodes_
+        env.provider_virtual_ip_is_specified_function = _is_elasticip_specified_
+        env.provider_virtual_ip_assign_function = assign_elastic_ip
         env.provider_load_balancer_is_specified_function = _is_elb_specifed_
         env.provider_load_balancer_membership_function = enumerate_elb_members
         env.provider_load_balancer_add_nodes_function = assign_to_elb
@@ -162,8 +164,19 @@ def delete_ec2_key_pair():
     os.removedirs(os.path.dirname(env.key_filename))
     info("Deleted temporary EC2 key pair '%s'" % (env.aws_ec2_ssh_key))
 
-def assign_elastic_ip(node, elastic_ip=None):
-    """Assigns the specified elastic IP address to the specified node. Uses env.elastic_ip if no elastic_ip provided."""
+
+def _is_elasticip_specified_():
+    return "elastic_ip" in env
+
+# TODO: rename to private _assign_to_elb_ and update clients to go through cloud.__init__'s virtual_ip_assign() function
+def assign_elastic_ip(node = None, elastic_ip=None):
+    """Assigns elastic IP address to node.
+    :param: node to assign elastic IP to or None for env.nodes[0]
+
+    :type: str
+    :param: Elastic IP address to assign or None for env.elastic_ip
+    """
+    node = node or env.nodes[0]
     elastic_ip = elastic_ip or env.elastic_ip
     if elastic_ip == ip_address(node):
         debug("ElasticIP %s already assigned to %s" % (elastic_ip, pretty_instance(node)))
