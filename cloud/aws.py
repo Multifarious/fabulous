@@ -33,10 +33,10 @@ def aws_config():
         env.provider_provision_function = _provision_ec2_nodes_
         env.provider_virtual_ip_is_specified_function = _is_elasticip_specified_
         env.provider_virtual_ip_assign_function = assign_elastic_ip
-        env.provider_load_balancer_is_specified_function = _is_elb_specifed_
-        env.provider_load_balancer_membership_function = enumerate_elb_members
-        env.provider_load_balancer_add_nodes_function = assign_to_elb
-        env.provider_load_balancer_remove_nodes_function = unassign_from_elb
+        env.provider_load_balancer_is_specified_function = _is_elb_specified_
+        env.provider_load_balancer_membership_function = _enumerate_elb_members_
+        env.provider_load_balancer_add_nodes_function = _assign_to_elb_
+        env.provider_load_balancer_remove_nodes_function = _unassign_from_elb_
         # By default, assume /etc/hosts needs munging if in VPC
         munge_by_default = 'aws_ec2_subnet_id' in env
         if ('aws_ec2_munge_etc_hosts' in env and env.aws_ec2_munge_etc_hosts) or munge_by_default:
@@ -194,10 +194,10 @@ def _find_elb_(elb_dns_name=None):
         ))
     return elb
 
-def _is_elb_specifed_():
+def _is_elb_specified_():
     return "aws_elb_name" in env
 
-def assign_to_elb(nodes = None, elb_dns_name = None):
+def _assign_to_elb_(nodes = None, elb_dns_name = None):
     """Adds nodes to the the Elastic Load Balancer.
     :type: list
     :param: Nodes to assign or None for env.nodes
@@ -212,7 +212,7 @@ def assign_to_elb(nodes = None, elb_dns_name = None):
         elb.register_instances([node.id for node in nodes])
 
 
-def unassign_from_elb(nodes = None, elb_dns_name=None):
+def _unassign_from_elb_(nodes = None, elb_dns_name=None):
     """Removes nodes from the Elastic Load Balancer.
     :type: list
     :param: Nodes to assign or None for env.nodes
@@ -226,7 +226,7 @@ def unassign_from_elb(nodes = None, elb_dns_name=None):
         info("Removing %s from ELB %s" % ([pretty_instance(node) for node in nodes], elb_dns_name))
         elb.deregister_instances([node.id for node in nodes])
 
-def enumerate_elb_members(elb_dns_name=None):
+def _enumerate_elb_members_(elb_dns_name=None):
     """Returns list of nodes behind the Elastic Load Balancer.
 
     :type: str
