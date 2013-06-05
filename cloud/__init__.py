@@ -5,11 +5,12 @@ from fabulous.config import configure
 from paramiko import SSHException
 import re
 
-def show():
-    """Shows members of currently provisioned cluster."""
-    if (len(env.nodes) > 0):
+def show(nodes = None):
+    """Pretty-prints table of provided nodes, or env.nodes otherwise."""
+    nodes = nodes or env.nodes
+    if (len(nodes) > 0):
         print ("<node id> (<node name> @ <ip address>)")
-        print(pretty_instances(env.nodes, "\n"))
+        print(pretty_instances(nodes, "\n"))
     else:
         print("<no nodes>")
     print("")
@@ -110,8 +111,9 @@ def instances_with_name(exp=".*"):
             pass
     return instances
 
-def instances_with_platform_and_role(platform, role):
-    return filter(lambda node: platform_of(node) == platform and role_of(node) == role, instances())
+def instances_with_platform_and_role(platform, role, nodes = None):
+    nodes = nodes or instances()
+    return filter(lambda node: platform_of(node) == platform and role_of(node) == role, nodes)
 
 def instances_with_role(role):
     return filter(lambda node: role_of(node) == role, instances())
@@ -163,7 +165,11 @@ def decommission_nodes():
 
 def virtual_ip_specified():
     """Returns True if a virtual IP address has been specified."""
-    return env.provider_virtual_ip_is_specified_functionn()
+    return env.provider_virtual_ip_is_specified_function()
+
+def virtual_ip_get_node():
+    """Returns the node which holds the virtual IP address."""
+    return env.provider_virtual_ip_membership_function()
 
 def virtual_ip_assign():
     """Assigns virtual IP address to currently use()'d node."""

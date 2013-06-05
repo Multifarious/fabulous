@@ -25,6 +25,13 @@ def aws_config():
         elif ("aws_ec2_ssh_key" not in env) and env.key_filename != None:
             error("EC2 SSH key name not not specified but path to key file provided with -i parameter. Either provide both or neither (in which case a temporary one will be generated).")
             return False
+        if _is_elasticip_specified_():
+            if _is_elb_specified_():
+                error("Elastic IP and Elastic Load Balancer cannot both be specified.")
+            else:
+                debug("Using Elastic IP " + env.elastic_ip)
+        elif _is_elb_specified_():
+            debug("Using Elastic Load Balancer " + env.aws_elb_name)
         env.aws_ec2_security_groups = [env.aws_ec2_security_group] if 'aws_ec2_security_group' in env else None
         env.aws_ec2_security_group_ids = [env.aws_ec2_security_group_id] if 'aws_ec2_security_group_id' in env else None
         env.user=env['ec2_ami_user'] # Force SSH via the configured user for our AMI rather than local user identified by $USER
@@ -32,6 +39,7 @@ def aws_config():
         env.provider_decommission_function = _decommission_ec2_nodes_
         env.provider_provision_function = _provision_ec2_nodes_
         env.provider_virtual_ip_is_specified_function = _is_elasticip_specified_
+        env.provider_virtual_ip_membership_function = _get_elastic_ip_node_
         env.provider_virtual_ip_assign_function = assign_elastic_ip
         env.provider_load_balancer_is_specified_function = _is_elb_specified_
         env.provider_load_balancer_membership_function = _enumerate_elb_members_
@@ -183,6 +191,14 @@ def assign_elastic_ip(node = None, elastic_ip=None):
     else:
         info("Assigning ElasticIP %s to %s" % (elastic_ip, pretty_instance(node)))
         connect().associate_address(node.id, elastic_ip)
+
+def _get_elastic_ip_node_():
+    """Looks through all nodes to find which, if any, holds the ElasticIP."""
+    all_instances = _ec2_instances_()
+    for instance in all_instances:
+        if ip_address(instance) == env.elastic_ip:
+            return instance
+    return None
 
 def _find_elb_(elb_dns_name=None):
     elb_dns_name = elb_dns_name or env.aws_elb_name
