@@ -39,6 +39,8 @@ def configure():
             warn("No cloud provider config functions were supplied via env.provider_config_functions and/or no provider was selected via env.provider")
             # This might have been intentional for non-cloud use, so don't abort
             env.configured = True
+        if not "group" in env:
+            env.group = env.user
         return True
 
 def _apply_defaults_():

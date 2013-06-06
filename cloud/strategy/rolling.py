@@ -116,7 +116,6 @@ def scale_down():
     if len(env.nodes) == 0:
         info("There are no extra nodes to scale down.")
     else:
-        # TODO: wire in service shutdown here as well.
         lb_remove_nodes()
 
 def _sort_nodes_(nodes):

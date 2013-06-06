@@ -11,8 +11,7 @@ import re
 def make_staging_directory(basename = "project", parent = "/opt"):
     dir_tmp = path.join(parent,basename) + time.strftime("_%Y%m%d_%H%M%S") + ".deploying"
     sudo('mkdir -p %s' % dir_tmp)
-    sudo("chown %s %s" % (env.user, dir_tmp))
-    sudo("chgrp %s %s" % (env.group if "group" in env else env.user, dir_tmp))
+    sudo("chown %s:%s %s" % (env.user, env.group, dir_tmp))
     return dir_tmp
 
 def flip(staging_dir):
