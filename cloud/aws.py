@@ -155,7 +155,7 @@ def _decommission_ec2_nodes_():
     for elb in connect_elb().get_all_load_balancers():
         for instance_info in elb.instances:
             if instance_info.id in node_ids:
-                warn("%s is one of %d instances behind Elastic Load Balancer %s" % (node_ids[instance_info.id], len(elb.instances), elb.dns_name))
+                warn("%s is one of %d instances behind Elastic Load Balancer %s" % (node_ids[instance_info.id], len(elb.instances), elb.name))
                 ok = False
     if ok:
         # instance-store backed hosts cannot be stopped, only terminated.
@@ -200,20 +200,22 @@ def _get_elastic_ip_node_():
             return instance
     return None
 
-def _find_elb_(elb_dns_name=None):
-    elb_dns_name = elb_dns_name or env.aws_elb_name
-    elb = connect_elb().get_all_load_balancers([elb_dns_name])
-    if not elb:
+def _find_elb_(elb_name=None):
+    elb_name = elb_name or env.aws_elb_name
+    elb = connect_elb().get_all_load_balancers([elb_name])
+    if elb and len(elb) == 1:
+        return elb[0]
+    else:
         error("Cannot locate ELB %s. Known load balancers are: %s" % (
-            elb_dns_name,
-            [elb.dns_name for elb in connect_elb().get_all_load_balancers()]
+            elb_name,
+            [elb.name for elb in connect_elb().get_all_load_balancers()]
         ))
-    return elb
+        return None
 
 def _is_elb_specified_():
     return "aws_elb_name" in env
 
-def _assign_to_elb_(nodes = None, elb_dns_name = None):
+def _assign_to_elb_(elb_name = None, nodes = None):
     """Adds nodes to the the Elastic Load Balancer.
     :type: list
     :param: Nodes to assign or None for env.nodes
@@ -222,13 +224,13 @@ def _assign_to_elb_(nodes = None, elb_dns_name = None):
     :param: DNS name of ELB or None for env.aws_elb_name.
     """
     nodes = nodes or env.nodes
-    elb = _find_elb_(elb_dns_name)
+    elb = _find_elb_(elb_name)
     if elb:
-        info("Adding %s to ELB %s" % ([pretty_instance(node) for node in nodes], elb_dns_name))
+        info("Adding %s to ELB %s" % ([pretty_instance(node) for node in nodes], elb_name))
         elb.register_instances([node.id for node in nodes])
 
 
-def _unassign_from_elb_(nodes = None, elb_dns_name=None):
+def _unassign_from_elb_(elb_name=None, nodes = None):
     """Removes nodes from the Elastic Load Balancer.
     :type: list
     :param: Nodes to assign or None for env.nodes
@@ -237,26 +239,26 @@ def _unassign_from_elb_(nodes = None, elb_dns_name=None):
     :param: DNS name of ELB or None for env.aws_elb_name.
     """
     nodes = nodes or env.nodes
-    elb = _find_elb_(elb_dns_name)
+    elb = _find_elb_(elb_name)
     if elb:
-        info("Removing %s from ELB %s" % ([pretty_instance(node) for node in nodes], elb_dns_name))
+        info("Removing %s from ELB %s" % ([pretty_instance(node) for node in nodes], elb_name))
         elb.deregister_instances([node.id for node in nodes])
 
-def _enumerate_elb_members_(elb_dns_name=None):
+def _enumerate_elb_members_(elb_name=None):
     """Returns list of nodes behind the Elastic Load Balancer.
 
     :type: str
     :param: DNS name of ELB or None for env.aws_elb_name.
     """
-    elb = _find_elb_(elb_dns_name)
+    elb = _find_elb_(elb_name)
     result = []
     if elb:
         all_instances = _ec2_instances_by_id()
-        for instance_info in elb.instances():
+        for instance_info in elb.instances:
             instance = all_instances.get(instance_info.id)
             if instance:
-                result += instance
+                result.append(instance)
             else:
-                warn("ELB %s reports member node %s, but no such instance is known." % (elb.dns_name,instance_info.id))
+                warn("ELB %s reports member node %s, but no such instance is known." % (elb.name,instance_info.id))
     return result
 
