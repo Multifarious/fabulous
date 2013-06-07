@@ -7,6 +7,9 @@ from fabulous.config import verify_env_contains_keys
 from fabulous.cloud import pretty_instance
 import re
 
+def is_datadog_enabled():
+    return 'datadog_api_key' in env and env.datadog_api_key
+
 @retry(SystemExit)
 def install_datadog_agent(datadog_api_key = None):
     """
@@ -53,7 +56,8 @@ def get_datadog_tags(datadog_tags = None):
     """Returns provided datadog_tags or, if not provided, loads from env.datadog_tags
    Accepts space and comma delimited tags and returns as list.
     """
-    if not datadog_tags:
-        verify_env_contains_keys('datadog_tags')
-        datadog_tags = env.datadog_tags
+    if datadog_tags is None:
+        datadog_tags = env.datadog_tags if 'datadog_tags' in env else []
+    if datadog_tags == '':
+        datadog_tags = []
     return re.split('[, ]', datadog_tags) if isinstance(datadog_tags, basestring) else datadog_tags
