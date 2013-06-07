@@ -8,8 +8,11 @@ from fabric.api import env, task, runs_once
 from fabric.colors import cyan,green,magenta,red
 from fabric.contrib.console import confirm
 from fabulous import debug,info,retry
-from fabulous.cloud import decommission_nodes,id_of,instances_with_platform_and_role,lb_add_nodes,lb_get_nodes,lb_remove_nodes,lb_specified,provision_nodes,show,use_only,virtual_ip_get_node,virtual_ip_specified
+from fabulous.cloud import decommission_nodes,id_of,instances_with_platform_and_role,lb_add_nodes,lb_get_nodes,lb_remove_nodes,lb_specified,provision_nodes,show,use,use_only,virtual_ip_get_node,virtual_ip_specified
 from fabulous.config import configure
+
+ACTIVE,EXTRA,INACTIVE,ORPHAN = ['ACTIVE','EXTRA','INACTIVE','ORPHAN']
+MAX_ID = "MAX_ID"
 
 @task(name="list")
 @runs_once
@@ -18,12 +21,9 @@ def list_nodes():
     configure()
     print("")
 
-    inactive = identify_inactive_nodes()
-    orphan = identify_orphan_nodes()
-    extra = identify_extra_nodes()
-    active = identify_active_nodes()
+    nodes = classify_nodes()
 
-    if len(inactive) > 0:
+    if nodes[INACTIVE]:
         print("")
         print(magenta("** INACTIVE nodes **"))
         if lb_specified():
@@ -32,41 +32,41 @@ def list_nodes():
             print(magenta("INACTIVE nodes are nodes not behind the virtual IP."))
         else:
             print(magenta("INACTIVE nodes are nodes in excess of the target cluster size."))
-        if len(orphan) > 0:
+        if len(nodes[ORPHAN]) > 0:
             print(magenta("To decommission INACTIVE and ORPHAN nodes, use the prune task."))
         else:
             print(magenta("To decommission these nodes, use the prune task."))
-        show(inactive)
+        show(nodes[INACTIVE])
 
-    if len(orphan) > 0:
+    if nodes[ORPHAN]:
         print("")
         print(red("** ORPHAN nodes **"))
         if lb_specified():
             print(red("ORPHAN nodes are nodes not behind the load balancer but ought to be according to target cluster size and node id sequence."))
         elif virtual_ip_specified():
             print(red("ORPHAN nodes are nodes not behind the virtual IP but ought to be according to target cluster size and node id sequence."))
-        if len(inactive) > 0:
+        if nodes[INACTIVE]:
             print(red("To decommission INACTIVE and ORPHAN nodes, use the prune task."))
         else:
             print(red("To decommission these nodes, use the prune task."))
-        show(orphan)
+        show(nodes[ORPHAN])
 
-    if len(extra) > 0:
+    if nodes[EXTRA]:
         print(cyan("** EXTRA nodes **"))
         print(cyan("EXTRA nodes are nodes in excess of the target cluster size but live behind the load balancer."))
         print(cyan("To decommission these nodes, use the scale_down task."))
-        show(extra)
+        show(nodes[EXTRA])
 
-    if len(active) > 0:
+    if nodes[ACTIVE]:
         print("")
         print(green("** ACTIVE nodes **"))
         if lb_specified():
             print(green("ACTIVE nodes are nodes behind the load balancer and current according to target cluster size and node id sequence."))
         elif virtual_ip_specified():
             print(green("ACTIVE nodes are nodes behind the virtual IP and current according to the node id sequence."))
-        show()
+        show(nodes[ACTIVE])
 
-    if (inactive or orphan or extra or active):
+    if nodes[INACTIVE] or nodes[ORPHAN] or nodes[EXTRA] or nodes[INACTIVE]:
         print("")
         print("To decommission all nodes, use the teardown task.")
         print("To connect to a node, use:")
@@ -80,16 +80,16 @@ def list_nodes():
 def provision():
     """Provisions env.num_nodes new nodes."""
     configure()
-    last_id = use_all_nodes()
     use_only()
-    env.new_nodes = provision_nodes(env.num_nodes, last_id + 1)
+    env.new_nodes = provision_nodes(env.num_nodes, classify_nodes()[MAX_ID] + 1)
 
 @task(name="prune")
 @runs_once
 def decommission_unused():
     """De-provisions inactive and orphan nodes."""
     configure()
-    use_only(*identify_inactive_nodes() + identify_orphan_nodes())
+    nodes = classify_nodes()
+    use_only(*nodes[INACTIVE] + nodes[ORPHAN])
     if len(env.nodes) == 0:
         info("There are no inactive or orphan nodes to decommission.")
     else:
@@ -100,7 +100,7 @@ def decommission_unused():
 def decommission_all():
     """De-provisions all nodes."""
     configure()
-    use_all_nodes()
+    use_only(*instances_with_platform_and_role(env.platform, env.role))
     if len(env.nodes) == 0:
         info("There are no nodes to decommission.")
     else:
@@ -112,7 +112,7 @@ def decommission_all():
 @runs_once
 def scale_down():
     """Removes excess nodes from the load balancer (thus extra nodes are made into inactive nodes)."""
-    use_only(*identify_extra_nodes())
+    use_only(*classify_nodes()[EXTRA])
     if len(env.nodes) == 0:
         info("There are no extra nodes to scale down.")
     else:
@@ -121,77 +121,97 @@ def scale_down():
 def _sort_nodes_(nodes):
     return sorted(nodes, key = id_of) # sequential ids means oldest node to newest
 
-def all_nodes():
-    return _sort_nodes_(instances_with_platform_and_role(env.platform, env.role))
+#def all_nodes():
+#    return _sort_nodes_(instances_with_platform_and_role(env.platform, env.role))
 
-def _identify_live_nodes_():
-    """Behind load balancer or virtual IP but not necessarily of the appropriate platform and role or perhaps too old"""
+def classify_nodes():
+    # Confusion warning: node.id is platform-role-unique_identifier, id_of(node) is unique_identifier.
+    # For rolling strategy, unique identifers are sequential
+    cluster_nodes = instances_with_platform_and_role(env.platform, env.role)
+    cluster_node_ids = set([node.id for node in cluster_nodes])
+    # max gets grumpy if only 1 argument. Hence two zeros to handle case when cluster is empty.
+    max_seq_number = max(0, 0, *[id_of(node) for node in cluster_nodes])
 
-def identify_active_nodes():
-    # ACTIVE:
-    #   behind load balancer / virtual IP (if applicable)
-    #   in the right platform / role
-    #   still current per desired cluster size and FIFO order
-    if lb_specified() or virtual_ip_specified():
-        if lb_specified():
-            live_nodes = lb_get_nodes()
+    if lb_specified():
+        live_nodes = lb_get_nodes()
+    elif virtual_ip_specified():
+        node = virtual_ip_get_node()
+        live_nodes = [node] if node else []
+    else:
+        live_nodes = cluster_nodes
+    live_node_ids = set([node.id for node in live_nodes])
+    live_nodes_not_in_cluster = [node for node in live_nodes if not node.id in cluster_node_ids]
+
+    # reversed sequential ids means newest to oldest
+    all_nodes = reversed(sorted(live_nodes_not_in_cluster + cluster_nodes, key = id_of))
+    active_nodes = []
+    extra_nodes = []
+    orphan_nodes = []
+    inactive_nodes = []
+    for node in all_nodes:
+        if node.id in live_node_ids:
+            if node.id in cluster_node_ids and len(active_nodes) < env.num_nodes:
+                # ACTIVE:
+                #   live behind load balancer / virtual IP (if applicable)
+                #   in the right platform / role
+                #   still current per desired cluster size and FIFO order
+                active_nodes.append(node)
+            else:
+                # EXTRA:
+                #   live behind the load balancer (thus no extras in Simple or Virtual IP modes)
+                #   ANY platform / role
+                #   NOT current per desired cluster size and FIFO order
+                if lb_specified():
+                    extra_nodes.append(node)
+                else:
+                    # INACTIVE:
+                    #   NOT behind the load balancer / virtual IP (if applicable)
+                    #   in the right platform /role
+                    #   NOT current per desired cluster size and FIFO order
+                    inactive_nodes.append(node)
         else:
-            node = virtual_ip_get_node()
-            live_nodes = [node] if node else []
+            # Node not live. All nodes being processed are in cluster or live, so not live implies in cluster
+            if len(active_nodes) + len(orphan_nodes) < env.num_nodes:
+                # ORPHAN:
+                #   NOT behind load balancer / virtual IP (thus no orphans in Simple mode)
+                #   in the right platform / role
+                #   still current per desired cluster size and FIFO order
+                orphan_nodes.append(node)
+            else:
+                inactive_nodes.append(node)
 
-        all_in_cluster = _sort_nodes_(
-            instances_with_platform_and_role(env.platform, env.role, live_nodes)
-        )
-    else:
-        all_in_cluster = all_nodes()
+    return {
+        ACTIVE : [node for node in reversed(active_nodes)],
+        EXTRA : [node for node in reversed(extra_nodes)],
+        INACTIVE : [node for node in reversed(inactive_nodes)],
+        ORPHAN : [node for node in reversed(orphan_nodes)],
+        MAX_ID : max_seq_number
+    }
 
-    return all_in_cluster[-env.num_nodes:]
-
-def identify_orphan_nodes():
-    # ORPHAN:
-    #  NOT behind load balancer / virtual IP (thus no orphans in Simple mode)
-    #  in the right platform / role
-    #  still current per desired cluster size and FIFO order
-    if not lb_specified() and not virtual_ip_specified():
-        # orphan node concept does not apply to Simple strategy
-        return []
-    active_nodes = identify_active_nodes()
-    if not active_nodes:
-        # Cannot have any orphan nodes when there are no active nodes
-        return []
-    # Orphan nodes are those which are newer than some of the active nodes but are not in the load balancer / virtual IP
-    oldest_active_id = id_of(_sort_nodes_(active_nodes)[0])
-    return [node for node in all_nodes() if id_of(node) > oldest_active_id]
-
-def identify_extra_nodes():
-    # EXTRA:
-    #   behind the load balancer (thus no extras in Simple or Virtual IP modes)
-    #   ANY platform / role
-    #   NOT current per desired cluster size and FIFO order
-    if not lb_specified():
-        return []
-    # Extra nodes are in the LB but no longer needed per desired cluster size and FIFO order (or in wrong platform/role!)
-    active_ids = set([id_of(node) for node in identify_active_nodes()])
-    return _sort_nodes_([node for node in lb_get_nodes() if not id_of(node) in active_ids])
-
-def identify_inactive_nodes():
-    # INACTIVE:
-    #   NOT behind the load balancer / virtual IP (if applicable)
-    #   in the right platform /role
-    #   NOT current per desired cluster size and FIFO order
-
-    not_inactive_ids = set([id_of(node) for node in identify_active_nodes() + identify_extra_nodes() + identify_orphan_nodes()])
-    return [node for node in all_nodes() if not id_of(node) in not_inactive_ids]
-
+@task(name="active")
+@runs_once
 def use_active_nodes():
-    "Uses only nodes that are active in the cluster. Membership is simply based on expected cluster size and sequential node id."
-    use_only(*identify_active_nodes())
+    """Operate on active nodes: current per cluster id sequence, behind load balancer / virtual IP."""
+    for node in classify_nodes()[ACTIVE]:
+        use(node)
 
-def use_all_nodes():
-    "Uses all existing nodes, returns max id of running nodes (or 0 if none)"
-    nodes = all_nodes()
-    use_only(*nodes)
-    if len(nodes) > 0:
-        return max([id_of(node) for node in all_nodes])
-    else:
-        return 0
+@task(name="extra")
+@runs_once
+def use_extra_nodes():
+    """Operate on extra nodes: not current per cluster id sequence, but behind load balancer."""
+    for node in classify_nodes()[EXTRA]:
+        use(node)
+
+@task(name="inactive")
+@runs_once
+def use_inactive_nodes():
+    """Operate on inactive nodes: not current per cluster id sequence, not behind load balancer / virtual IP."""
+    for node in classify_nodes()[INACTIVE]:
+        use(node)
+
+@task(name="orphan")
+@runs_once
+def use_orphan_nodes():
+    """Operate on orphan nodes: current per cluster id sequence, but not behind load balancer / virtual IP."""
+    for node in classify_nodes()[ORPHAN]:
+        use(node)
