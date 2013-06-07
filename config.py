@@ -57,7 +57,7 @@ def _apply_defaults_():
 
     # Force boolean conversions to make easier use later on
     if "bools" in env:
-        for k in env.ints:
+        for k in env.bools:
             if k in env:
                 env[k] = env[k].lower() in ("y","yes","t","true","1","enabled","on")
             else:
