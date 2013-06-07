@@ -7,7 +7,7 @@ import re
 
 def show(nodes = None):
     """Pretty-prints table of provided nodes, or env.nodes otherwise."""
-    nodes = nodes or env.nodes
+    nodes = env.nodes if nodes is None else nodes # Explicit None check because [] is False
     if (len(nodes) > 0):
         print ("<node id> (<node name> @ <ip address>)")
         print(pretty_instances(nodes, "\n"))
@@ -112,7 +112,7 @@ def instances_with_name(exp=".*"):
     return instances
 
 def instances_with_platform_and_role(platform, role, nodes = None):
-    nodes = nodes or instances()
+    nodes = instances() if nodes is None else nodes # Explicit None check because [] is False
     return filter(lambda node: platform_of(node) == platform and role_of(node) == role, nodes)
 
 def instances_with_role(role):
