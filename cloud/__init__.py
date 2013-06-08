@@ -61,8 +61,12 @@ def current_node():
 node_name_re = re.compile("([^-]+)-([^-]+)-(\d+)")
 
 def _node_name_piece_(node,i):
-    m = node_name_re.match(node.tags["Name"])
-    return m.groups()[i] if m else None
+    name_tag = node.tags.get("Name")
+    if name_tag:
+        m = node_name_re.match(name_tag)
+        return m.groups()[i] if m else None
+    else:
+        return None
 
 def platform_of(node):
     "Extract platform from a <platform>-<role>-<unique identifier> node name."
