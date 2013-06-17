@@ -66,7 +66,7 @@ def list_nodes():
             print(green("ACTIVE nodes are nodes behind the virtual IP and current according to the node id sequence."))
         show(nodes[ACTIVE])
 
-    if nodes[INACTIVE] or nodes[ORPHAN] or nodes[EXTRA] or nodes[INACTIVE]:
+    if nodes[ACTIVE] or nodes[ORPHAN] or nodes[EXTRA] or nodes[INACTIVE]:
         print("")
         print("To decommission all nodes, use the teardown task.")
         print("To connect to a node, use:")
