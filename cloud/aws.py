@@ -1,8 +1,8 @@
 from boto import ec2
 from boto.ec2 import elb
-from fabric.api import env, execute, run
+from fabric.api import env, execute, run, sudo
 from fabric.colors import green
-from fabric.contrib.files import sed
+from fabric.contrib.files import append,sed
 from . import ip_address, pretty_instance
 from .. import debug, error, info, warn
 from ..config import verify_env_contains_keys
@@ -25,22 +25,30 @@ def aws_config():
         elif ("aws_ec2_ssh_key" not in env) and env.key_filename != None:
             error("EC2 SSH key name not not specified but path to key file provided with -i parameter. Either provide both or neither (in which case a temporary one will be generated).")
             return False
-        if _is_elasticip_specified_():
-            if _is_elb_specified_():
-                error("Elastic IP and Elastic Load Balancer cannot both be specified.")
+
+        if len(filter(lambda x: x, [_is_elasticip_specified_(), _is_secondary_ip_specified_(), _is_elb_specified_()])) > 1:
+            error("Cannot specify more than one of: Elastic IP, VPC Secondary IP, Elastic Load Balancer.")
+            return False
+        elif _is_elasticip_specified_():
+            debug("Using Elastic IP " + env.elastic_ip)
+        elif _is_secondary_ip_specified_():
+            if 'secondary_ip_cidr_prefix_size' in env:
+                debug("Using VPC Secondary IP " + env.secondary_ip)
             else:
-                debug("Using Elastic IP " + env.elastic_ip)
+                error("When using a VPC Secondary IP, secondary_ip_cidr_prefix_size must be specified as well.")
+                return False
         elif _is_elb_specified_():
             debug("Using Elastic Load Balancer " + env.aws_elb_name)
+
         env.aws_ec2_security_groups = [env.aws_ec2_security_group] if 'aws_ec2_security_group' in env else None
         env.aws_ec2_security_group_ids = [env.aws_ec2_security_group_id] if 'aws_ec2_security_group_id' in env else None
         env.user=env['ec2_ami_user'] # Force SSH via the configured user for our AMI rather than local user identified by $USER
         env.provider_instance_function = _ec2_instances_
         env.provider_decommission_function = _decommission_ec2_nodes_
         env.provider_provision_function = _provision_ec2_nodes_
-        env.provider_virtual_ip_is_specified_function = _is_elasticip_specified_
-        env.provider_virtual_ip_membership_function = _get_elastic_ip_node_
-        env.provider_virtual_ip_assign_function = assign_elastic_ip
+        env.provider_virtual_ip_is_specified_function = _is_virtual_ip_specified_
+        env.provider_virtual_ip_membership_function = _get_virtual_ip_node_
+        env.provider_virtual_ip_assign_function = _assign_virtual_ip_
         env.provider_load_balancer_is_specified_function = _is_elb_specified_
         env.provider_load_balancer_membership_function = _enumerate_elb_members_
         env.provider_load_balancer_add_nodes_function = _assign_to_elb_
@@ -199,6 +207,56 @@ def _get_elastic_ip_node_():
         if ip_address(instance) == env.elastic_ip:
             return instance
     return None
+
+def _is_secondary_ip_specified_():
+    return "secondary_ip" in env
+
+def _assign_secondary_ip_():
+    """Assigns secondary IP address to node's first interface.
+    :param: node to assign secondary IP to or None for env.nodes[0]
+    """
+    interface_idx = 0
+    node = env.nodes[0]
+    cidr='%s/%s' % (env.secondary_ip,env.secondary_ip_cidr_prefix_size)
+
+    if (_get_secondary_ip_node_().id == node.id):
+        debug("VPC Secondary IP %s already assigned to %s" % (cidr, pretty_instance(node)))
+    else:
+        info("Assigning VPC Secondary IP %s to %s" % (cidr, pretty_instance(node)))
+        connect().assign_private_ip_addresses(node.interfaces[interface_idx].id, env.secondary_ip, allow_reassignment=True)
+        # Notify opsys that it has a new address (This seems to only happen automatically with Elastic IPs). Write to /etc to make persistent.
+        has_address = run('ip addr | grep %s' % cidr, quiet=True)
+        if not has_address:
+            sudo('ip addr add %s dev eth0' % cidr)
+            append('/etc/network/interfaces','up ip addr add %s dev eth%d' % (cidr,interface_idx),use_sudo=True)
+
+def _get_secondary_ip_node_():
+    """Looks through all nodes to find which, if any, holds the Secondary IP."""
+    all_instances = _ec2_instances_()
+    for instance in all_instances:
+        for interface in instance.interfaces:
+            for address in interface.private_ip_addresses:
+                if address.private_ip_address == env.secondary_ip and not address.primary:
+                    return instance
+    return None
+
+def _is_virtual_ip_specified_():
+    "Gloss over Elastic IP vs. secondary IP distinction."
+    return _is_elasticip_specified_() or _is_secondary_ip_specified_()
+
+def _assign_virtual_ip_():
+    "Gloss over Elastic IP vs. secondary IP distinction."
+    if _is_elasticip_specified_():
+        return assign_elastic_ip()
+    else:
+        return _assign_secondary_ip_()
+
+def _get_virtual_ip_node_():
+    "Gloss over Elastic IP vs. secondary IP distinction."
+    if _is_elasticip_specified_():
+        return _get_elastic_ip_node_()
+    else:
+        return _get_secondary_ip_node_()
 
 def _find_elb_(elb_name=None):
     elb_name = elb_name or env.aws_elb_name
