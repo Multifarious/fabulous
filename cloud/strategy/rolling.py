@@ -105,7 +105,7 @@ def decommission_all():
         info("There are no nodes to decommission.")
     else:
         show()
-        if confirm("Are you sure you want to decommission ALL %d nodes? [y/N] " % len(env.nodes), default=False):
+        if confirm("Are you sure you want to decommission ALL %d nodes?" % len(env.nodes), default=False):
             decommission_nodes()
 
 @task(name="scale_down")

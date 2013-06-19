@@ -1,7 +1,9 @@
 from boto import ec2
 from boto.ec2 import elb
+from boto.exception import BotoServerError
 from fabric.api import env, execute, run, sudo
 from fabric.colors import green
+from fabric.contrib.console import confirm
 from fabric.contrib.files import append,sed
 from . import ip_address, pretty_instance
 from .. import debug, error, info, warn
@@ -160,16 +162,21 @@ def _decommission_ec2_nodes_():
     for node in env.nodes:
         node_ids[node.id] = node
     ok = True
-    for elb in connect_elb().get_all_load_balancers():
-        for instance_info in elb.instances:
-            if instance_info.id in node_ids:
-                warn("%s is one of %d instances behind Elastic Load Balancer %s" % (node_ids[instance_info.id], len(elb.instances), elb.name))
-                ok = False
+    try:
+        for elb in connect_elb().get_all_load_balancers():
+            for instance_info in elb.instances:
+                if instance_info.id in node_ids:
+                    warn("%s is one of %d instances behind Elastic Load Balancer %s" % (node_ids[instance_info.id], len(elb.instances), elb.name))
+                    ok = False
+        if not ok:
+            error("Decommissioning aborted because one or more nodes were behind load balancers.")
+    except BotoServerError, e:
+        warn("Unable to query AWS for Elastic Load Balancer information: %s" % e.error_message)
+        ok = confirm("Cannot guarantee that none of the nodes are behind an ELB. Continue?", default=False)
+
     if ok:
         # instance-store backed hosts cannot be stopped, only terminated.
         connect().terminate_instances([node.id for node in env.nodes])
-    else:
-        error("Decommissioning aborted because one or more nodes were behind load balancers.")
 
 def delete_ec2_key_pair():
     connect().delete_key_pair(env.aws_ec2_ssh_key)
