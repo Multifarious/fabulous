@@ -5,7 +5,7 @@ from fabric.api import env, execute, run, sudo
 from fabric.colors import green
 from fabric.contrib.console import confirm
 from fabric.contrib.files import append,sed
-from . import ip_address, pretty_instance
+from . import ip_address, pretty_instance, show
 from .. import debug, error, info, warn
 from ..config import verify_env_contains_keys
 import os
@@ -172,6 +172,7 @@ def _decommission_ec2_nodes_():
             error("Decommissioning aborted because one or more nodes were behind load balancers.")
     except BotoServerError, e:
         warn("Unable to query AWS for Elastic Load Balancer information: %s" % e.error_message)
+        show(env.nodes)
         ok = confirm("Cannot guarantee that none of the nodes are behind an ELB. Continue?", default=False)
 
     if ok:
