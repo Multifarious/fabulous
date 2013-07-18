@@ -291,6 +291,7 @@ def _assign_to_elb_(elb_name = None, nodes = None):
     """
     nodes = nodes or env.nodes
     elb = _find_elb_(elb_name)
+    elb_name = elb_name or env.aws_elb_name
     if elb:
         info("Adding %s to ELB %s" % ([pretty_instance(node) for node in nodes], elb_name))
         elb.register_instances([node.id for node in nodes])
@@ -306,6 +307,7 @@ def _unassign_from_elb_(elb_name=None, nodes = None):
     """
     nodes = nodes or env.nodes
     elb = _find_elb_(elb_name)
+    elb_name = elb_name or env.aws_elb_name
     if elb:
         info("Removing %s from ELB %s" % ([pretty_instance(node) for node in nodes], elb_name))
         elb.deregister_instances([node.id for node in nodes])
