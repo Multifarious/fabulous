@@ -45,7 +45,7 @@ def run_and_return_result(args,assert_successful=False):
 
 # -------------- Error helpers ------------------
 
-def retry(ExceptionToCheck, total_tries=4, initial_delay_seconds=3, backoff_multiplier=2):
+def retry(ExceptionToCheck, total_tries=4, initial_delay_seconds=3, backoff_multiplier=2, handler=None):
     """Retry calling the decorated function using an exponential back-off.
 
     adapted from: http://www.saltycrane.com/blog/2009/11/trying-out-retry-decorator-python/
@@ -53,6 +53,8 @@ def retry(ExceptionToCheck, total_tries=4, initial_delay_seconds=3, backoff_mult
 
     :param ExceptionToCheck: the exception to check. may be a tuple of
         exceptions to check
+
+    :param handler: If operation is never successful, final exception is raised unless a handler is provided, in which case it is invoked with the exception._log_
 
     Usage:
         @retry(ExceptionToCheck)
@@ -78,6 +80,9 @@ def retry(ExceptionToCheck, total_tries=4, initial_delay_seconds=3, backoff_mult
                         mdelay *= backoff_multiplier
                     else:
                         warn("%s: %s, Giving up after %d attempts." % (type(e).__name__,str(e), total_tries))
-            raise lastException
+            if handler:
+                handler(lastException)
+            else:
+                raise lastException
         return f_retry # true decorator
     return deco_retry
