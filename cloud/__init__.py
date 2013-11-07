@@ -155,7 +155,7 @@ def provision_nodes(num, next_id):
 @retry(SSHException, total_tries=8)
 def wait_for_ssh_access():
     execute(connect)
-    info("All nodes are now online.")
+    info("All nodes are now online. %s (%s)" % (env.hosts, env.nodes))
 
 @task
 def connect():
