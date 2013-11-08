@@ -13,15 +13,12 @@ def configure():
     if env.get("configured") is None:
         if not "defaults" in env:
             env.defaults = {}
-        env.defaults['provisioning_timeout'] = '300'
-        env.defaults['emr_provisioning_timeout'] = '360'
-        env.defaults['core_instance_count'] = '1'
+        env.defaults['num_nodes'] = 1
+        env.defaults['provisioning_timeout'] = 300
         if not "ints" in env:
             env.ints = []
+        env.ints.append('num_nodes')
         env.ints.append('provisioning_timeout')
-        env.ints.append('emr_provisioning_timeout')
-        env.ints.append('core_instance_count')
-
         _apply_defaults_()
         env.configured = False
         if env.provider_config_functions and len(env.provider_config_functions) > 0:
