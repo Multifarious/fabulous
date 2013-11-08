@@ -15,10 +15,12 @@ def configure():
             env.defaults = {}
         env.defaults['provisioning_timeout'] = '300'
         env.defaults['emr_provisioning_timeout'] = '360'
+        env.defaults['core_instance_count'] = '1'
         if not "ints" in env:
             env.ints = []
         env.ints.append('provisioning_timeout')
         env.ints.append('emr_provisioning_timeout')
+        env.ints.append('core_instance_count')
 
         _apply_defaults_()
         env.configured = False
