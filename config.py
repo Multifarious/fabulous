@@ -14,9 +14,11 @@ def configure():
         if not "defaults" in env:
             env.defaults = {}
         env.defaults['provisioning_timeout'] = '300'
+        env.defaults['emr_provisioning_timeout'] = '360'
         if not "ints" in env:
             env.ints = []
         env.ints.append('provisioning_timeout')
+        env.ints.append('emr_provisioning_timeout')
 
         _apply_defaults_()
         env.configured = False
