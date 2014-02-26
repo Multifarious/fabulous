@@ -60,7 +60,6 @@ def aws_config():
         if ('aws_ec2_munge_etc_hosts' in env and env.aws_ec2_munge_etc_hosts) or munge_by_default:
             env.provider_post_provision_hook = _munge_etc_hosts_
         debug("AWS access configured. EC2 SSH as %s using key %s" % (env.user, env.key_filename[0] if env.key_filename else "<to be created>"))
-        debug("AWS EMR SSH as %s" % (env['emr_user']))
         return True
     else:
         return False
