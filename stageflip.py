@@ -20,3 +20,4 @@ def flip(staging_dir):
     debug("Flipping directory name.")
     sudo("mv %s %s.retired" % (active_dir,retired_dir), quiet=True)
     sudo("mv %s %s" % (staging_dir,active_dir))
+    return active_dir
