@@ -4,7 +4,7 @@ from fabric.contrib.files import sed
 from fabric.operations import sudo
 from fabulous import debug, error, git, info, retry
 from fabulous.config import verify_env_contains_keys
-from fabulous.cloud import pretty_instance
+from fabulous.cloud import pretty_instance, current_node
 import re
 
 def is_datadog_enabled():
@@ -21,14 +21,22 @@ def install_datadog_agent(datadog_api_key = None):
     sudo('DD_API_KEY=%s bash -c "$(wget -qO- http://dtdg.co/agent-install-ubuntu)"' % get_datadog_api_key(datadog_api_key))
 
 @retry(SystemExit,total_tries = 8)
-def add_datadog_agent_tags(datadog_tags = None):
+def add_datadog_agent_tags(dd_hostname = None, datadog_tags = None):
     """
     Applies node-specific information to the Datadog agent configuration.
+    :param hostname: ideally the node ID
     :param datadog_tags: interpreted via get_datadog_tags
     """
+    dd_hostname = dd_hostname or current_node().tags.get("Name")
     tags = ','.join(get_datadog_tags(datadog_tags))
     info("Updating Datadog configuration with tag(s): %s." % tags)
-    sed('/etc/dd-agent/datadog.conf', '^[# ]?tags.*', 'tags: %s' % tags , use_sudo=True)
+    # Force the hostname to what we want
+    sed('/etc/dd-agent/datadog.conf', '^[# ]?hostname:.*', 'hostname: %s' % dd_hostname, use_sudo=True)
+    # Apply some tags
+    sed('/etc/dd-agent/datadog.conf', '^[# ]?tags:.*', 'tags: %s' % tags, use_sudo=True)
+    # Let the agent vacuum up EC2 tags
+    # # collect_ec2_tags: no
+    sed('/etc/dd-agent/datadog.conf', '^[# ]?collect_ec2_tags:.*', 'collect_ec2_tags: yes', use_sudo=True)
     sudo('service datadog-agent restart')
 
 def record_deployment(artifact_description = None, node_description = None, datadog_api_key = None, datadog_tags = None):
